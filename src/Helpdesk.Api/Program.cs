@@ -3,11 +3,38 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Helpdesk.Api;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 16 * 1024);
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow);
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "SeminarDesk API",
+        Version = "v1",
+        Description = "Локальный API для учебных обращений на семинарах."
+    });
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "opaque token",
+        In = ParameterLocation.Header,
+        Description = "Получите токен через POST /auth/login и вставьте его сюда."
+    });
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecurityScheme
+        {
+            Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+        }] = Array.Empty<string>()
+    });
+});
 builder.Services.AddSingleton<Store>();
 builder.Services.AddSingleton<Sessions>();
 builder.Services.AddRateLimiter(options =>
@@ -22,6 +49,11 @@ builder.Services.AddRateLimiter(options =>
 });
 var app = builder.Build();
 await app.Services.GetRequiredService<Store>().InitializeAsync(app.Environment.IsDevelopment());
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 app.Use(async (context, next) =>
 {
     context.Response.Headers.CacheControl = "no-store";
